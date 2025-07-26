@@ -1,0 +1,73 @@
+<?php
+/*
+Plugin Name: Auto News Setup
+Description: Configures automatic news aggregation
+*/
+
+// 1. Set up default categories
+function auto_news_create_categories() {
+    $categories = ['World', 'Politics', 'Technology', 'Business', 'Sports', 'Entertainment'];
+    
+    foreach ($categories as $cat) {
+        if (!term_exists($cat, 'category')) {
+            wp_insert_term($cat, 'category');
+        }
+    }
+}
+add_action('init', 'auto_news_create_categories');
+
+// 2. Configure automatic featured images
+function auto_news_set_featured_image($post_id) {
+    if (has_post_thumbnail($post_id)) return;
+    
+    $post = get_post($post_id);
+    $image_url = '';
+    
+    // Extract first image from content
+    preg_match_all('/<img.+src=[\'"]([^\'"]+)[\'"].*>/i', $post->post_content, $matches);
+    if (!empty($matches[1][0])) {
+        $image_url = $matches[1][0];
+    }
+    
+    // If no image, use category default
+    if (empty($image_url)) {
+        $categories = get_the_category($post_id);
+        $default_images = [
+            'World' => 'https://example.com/default-world.jpg',
+            'Technology' => 'https://example.com/default-tech.jpg',
+            // Add other category defaults
+        ];
+        
+        foreach ($categories as $category) {
+            if (isset($default_images[$category->name])) {
+                $image_url = $default_images[$category->name];
+                break;
+            }
+        }
+    }
+    
+    if ($image_url) {
+        update_post_meta($post_id, '_thumbnail_ext_url', $image_url);
+    }
+}
+add_action('save_post', 'auto_news_set_featured_image', 100);
+
+// 3. Auto embed videos when URL detected
+function auto_news_embed_videos($content) {
+    // YouTube
+    $content = preg_replace(
+        '/\s*https?:\/\/(www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)\s*/',
+        '<div class="video-container"><iframe width="560" height="315" src="https://www.youtube.com/embed/$2" frameborder="0" allowfullscreen></iframe></div>',
+        $content
+    );
+    
+    // Vimeo
+    $content = preg_replace(
+        '/\s*https?:\/\/vimeo\.com\/([0-9]+)\s*/',
+        '<div class="video-container"><iframe src="https://player.vimeo.com/video/$1" width="640" height="360" frameborder="0" allowfullscreen></iframe></div>',
+        $content
+    );
+    
+    return $content;
+}
+add_filter('the_content', 'auto_news_embed_videos');
